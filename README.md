@@ -10,6 +10,9 @@ Design the patterns manually using the colour picker and select the LED pixel or
 
 There is a preview and button to download the profiles.h file 
 
+![Designer Interface](https://github.com/mc71/Glowstick-Web/blob/main/screenshots/Screenshot%202024-10-31%20at%2011.31.54%E2%80%AFPM.png)
+![Output](https://github.com/mc71/Glowstick-Web/blob/main/screenshots/Screenshot%202024-10-31%20at%2011.31.46%E2%80%AFPM.png)
+
 **This is very much a proof of concept.**
 
 Todo: Properly match the image dimesnions to the LED arrangement.
