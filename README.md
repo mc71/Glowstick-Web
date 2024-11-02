@@ -1,6 +1,7 @@
 # Glowstick LED designer
-Created with Fresh.
-You can follow the Fresh "Getting Started" guide here: https://fresh.deno.dev/docs/getting-started
+
+try it at https://mc71-glowstick.deno.dev/
+
 
 This was created specifically for the Lofted Aero Glowstick but can be adapted for any other application.
 
@@ -19,6 +20,12 @@ Todo: Properly match the image dimesnions to the LED arrangement.
 provide a way to position the LED surfaces in space correctly.
 Add text input and animation
 Better handling of the pixel array to avoid overlapping
+
+
+
+Created with Fresh.
+You can follow the Fresh "Getting Started" guide here: https://fresh.deno.dev/docs/getting-started
+
 
 ### Usage
 
