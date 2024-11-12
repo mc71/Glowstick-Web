@@ -34,6 +34,20 @@ const LEDPatternDesigner = () => {
   });
   const canvasRef = useRef(null);
 
+  // Add new state for LED spacing and image spanning
+  const [ledSpacing, setLedSpacing] = useState({
+    pixelSize: 10, // pixels per LED
+    wingGap: 2, // gap between wings in LED units
+    tailGap: 2, // gap between tails in LED units
+    wingTailGap: 1, // vertical gap between wings and tails in LED units
+  });
+
+  const [imageSpanning, setImageSpanning] = useState({
+    spanWings: true, // span image across both wings
+    spanTails: true, // span image across both tails
+    preserveAspectRatio: true,
+  });
+
   const updateDimensions = (section, property, value) => {
     const numValue = parseInt(value);
     if (isNaN(numValue)) return;
@@ -126,52 +140,102 @@ const LEDPatternDesigner = () => {
     reader.readAsDataURL(file);
   };
 
+  // Add function to calculate physical layout
+  const calculatePhysicalLayout = () => {
+    const { pixelSize, wingGap, tailGap, wingTailGap } = ledSpacing;
+    const totalWidth = (dimensions.leftWing.width * 2 + wingGap) * pixelSize;
+    const totalHeight = (dimensions.leftWing.height + wingTailGap + dimensions.leftTail.height) * pixelSize;
+
+    return {
+      leftWing: {
+        x: 0,
+        y: 0,
+        width: dimensions.leftWing.width * pixelSize,
+        height: dimensions.leftWing.height * pixelSize,
+      },
+      rightWing: {
+        x: (dimensions.leftWing.width + wingGap) * pixelSize,
+        y: 0,
+        width: dimensions.rightWing.width * pixelSize,
+        height: dimensions.rightWing.height * pixelSize,
+      },
+      leftTail: {
+        x: dimensions.leftWing.width * pixelSize / 2,
+        y: (dimensions.leftWing.height + wingTailGap) * pixelSize,
+        width: dimensions.leftTail.width * pixelSize,
+        height: dimensions.leftTail.height * pixelSize,
+      },
+      rightTail: {
+        x: (dimensions.leftWing.width + wingGap) * pixelSize / 2,
+        y: (dimensions.leftWing.height + wingTailGap) * pixelSize,
+        width: dimensions.rightTail.width * pixelSize,
+        height: dimensions.rightTail.height * pixelSize,
+      },
+    };
+  };
+
+  // Modify the processImage function
   const processImage = (img) => {
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
+    const layout = calculatePhysicalLayout();
 
-    let minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    Object.entries(dimensions).forEach(([section, dims]) => {
-      if (selectedSections[section]) {
-        minX = Math.min(minX, dims.x);
-        minY = Math.min(minY, dims.y);
-        maxX = Math.max(maxX, dims.x + dims.width);
-        maxY = Math.max(maxY, dims.y + dims.height);
-      }
-    });
+    // Calculate canvas dimensions based on physical layout
+    canvas.width = (dimensions.leftWing.width * 2 + ledSpacing.wingGap) * ledSpacing.pixelSize;
+    canvas.height = (dimensions.leftWing.height + ledSpacing.wingTailGap + dimensions.leftTail.height) * ledSpacing.pixelSize;
 
-    canvas.width = maxX - minX;
-    canvas.height = maxY - minY;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Clear canvas
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    Object.entries(dimensions).forEach(([section, dims]) => {
+    // Draw image according to spanning settings
+    if (imageSpanning.preserveAspectRatio) {
+      const scale = Math.min(
+        canvas.width / img.width,
+        canvas.height / img.height
+      );
+      const scaledWidth = img.width * scale;
+      const scaledHeight = img.height * scale;
+      const x = (canvas.width - scaledWidth) / 2;
+      const y = (canvas.height - scaledHeight) / 2;
+      ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+    } else {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    }
+
+    // Update patterns based on physical layout
+    Object.entries(layout).forEach(([section, coords]) => {
       if (!selectedSections[section]) return;
 
-      const newPattern = Array(dims.height)
+      const newPattern = Array(dimensions[section].height)
         .fill()
         .map((_, row) =>
-          Array(dims.width)
+          Array(dimensions[section].width)
             .fill()
             .map((_, col) => {
-              const x = dims.x - minX + col;
-              const y = dims.y - minY + row;
-
-              if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) {
-                return "#0FFF";
+              const x = Math.floor(coords.x + (col * ledSpacing.pixelSize));
+              const y = Math.floor(coords.y + (row * ledSpacing.pixelSize));
+              const pixelData = ctx.getImageData(x, y, ledSpacing.pixelSize, ledSpacing.pixelSize).data;
+              
+              // Average color over pixel area
+              let r = 0, g = 0, b = 0;
+              for (let i = 0; i < ledSpacing.pixelSize; i++) {
+                for (let j = 0; j < ledSpacing.pixelSize; j++) {
+                  const idx = ((y + j) * canvas.width + (x + i)) * 4;
+                  r += pixelData[idx];
+                  g += pixelData[idx + 1];
+                  b += pixelData[idx + 2];
+                }
               }
-
-              const pixelData = ctx.getImageData(x, y, 1, 1).data;
-              const hex = rgbToHex(pixelData[0], pixelData[1], pixelData[2]);
+              const area = ledSpacing.pixelSize * ledSpacing.pixelSize;
+              const hex = rgbToHex(r/area, g/area, b/area);
               return hex.replace("#", "0x");
             })
         );
 
-      setPatterns((prev) => ({
+      setPatterns(prev => ({
         ...prev,
-        [section]: newPattern,
+        [section]: newPattern
       }));
     });
   };
@@ -287,6 +351,39 @@ const LEDPatternDesigner = () => {
     </div>
   );
 
+  // Add spacing controls to the UI
+  const renderSpacingControls = () => (
+    <div className="mb-6 grid grid-cols-2 gap-4">
+      <div>
+        <label className="block text-sm font-medium mb-1">LED Pixel Size (px)</label>
+        <input
+          type="number"
+          value={ledSpacing.pixelSize}
+          onChange={(e) => setLedSpacing(prev => ({...prev, pixelSize: parseInt(e.target.value)}))}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+        />
+      </div>
+      {/* Add similar controls for wingGap, tailGap, and wingTailGap */}
+    </div>
+  );
+
+  // Add spanning controls to the UI
+  const renderSpanningControls = () => (
+    <div className="mb-6">
+      <h3 className="font-bold mb-2">Image Spanning Options</h3>
+      <div className="space-y-2">
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={imageSpanning.spanWings}
+            onChange={(e) => setImageSpanning(prev => ({...prev, spanWings: e.target.checked}))}
+          />
+          <span>Span across wings</span>
+        </label>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-4 max-w-12xl mx-auto font-sans">
       <div className="bg-white rounded-lg shadow-lg">
@@ -361,6 +458,9 @@ const LEDPatternDesigner = () => {
           </div>
 
           <canvas ref={canvasRef} className="hidden" />
+
+          {renderSpacingControls()}
+          {renderSpanningControls()}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {renderSection("leftWing", "Left Wing")}
