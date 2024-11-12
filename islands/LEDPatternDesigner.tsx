@@ -1,26 +1,28 @@
-import { useState, useRef } from "preact/hooks";
+import { useState, useRef, useEffect } from "preact/hooks";
 
 const LEDPatternDesigner = () => {
   const [dimensions, setDimensions] = useState({
     leftWing: { width: 29, height: 8, x: 0, y: 0 },
-    rightWing: { width: 29, height: 8, x: 60, y: 0 },
-    leftTail: { width: 9, height: 4, x: 20, y: 10 },
-    rightTail: { width: 9, height: 4, x: 40, y: 10 },
+    rightWing: { width: 29, height: 8, x: 30, y: 0 },
+    // Center the tail sections by calculating x position based on wing width
+    leftTail: { width: 9, height: 4, x: 20, y: 10 },  // Centered under left wing
+    rightTail: { width: 9, height: 4, x: 30, y: 10 }, // Centered under right wing
   });
 
+  // Modify initial patterns to use "0x0FFF" for white
   const [patterns, setPatterns] = useState({
     leftWing: Array(8)
       .fill()
-      .map(() => Array(29).fill("#0FFF")),
+      .map(() => Array(29).fill("0x0FFF")),
     rightWing: Array(8)
       .fill()
-      .map(() => Array(29).fill("#0FFF")),
+      .map(() => Array(29).fill("0x0FFF")),
     leftTail: Array(4)
       .fill()
-      .map(() => Array(9).fill("#0FFF")),
+      .map(() => Array(9).fill("0x0FFF")),
     rightTail: Array(4)
       .fill()
-      .map(() => Array(9).fill("#0FFF")),
+      .map(() => Array(9).fill("0x0FFF")),
   });
 
   const [activeColor, setActiveColor] = useState("#FFFFFF");
@@ -34,18 +36,24 @@ const LEDPatternDesigner = () => {
   });
   const canvasRef = useRef(null);
 
-  // Add new state for LED spacing and image spanning
-  const [ledSpacing, setLedSpacing] = useState({
-    pixelSize: 10, // pixels per LED
-    wingGap: 2, // gap between wings in LED units
-    tailGap: 2, // gap between tails in LED units
-    wingTailGap: 1, // vertical gap between wings and tails in LED units
+  // Modify imagePosition to use relative values (percentages)
+  const [imagePosition, setImagePosition] = useState({
+    x: 50, // center position (0-100)
+    y: 50, // center position (0-100)
+    scale: 1,
+    rotation: 0,
   });
 
-  const [imageSpanning, setImageSpanning] = useState({
-    spanWings: true, // span image across both wings
-    spanTails: true, // span image across both tails
-    preserveAspectRatio: true,
+  // Add state for tracking mouse dragging
+  const [isDragging, setIsDragging] = useState(false);
+  const [currentSection, setCurrentSection] = useState(null);
+
+  // Add new state for grid justification
+  const [gridJustification, setGridJustification] = useState({
+    leftWing: 'right',
+    rightWing: 'left',
+    leftTail: 'right',
+    rightTail: 'left',
   });
 
   const updateDimensions = (section, property, value) => {
@@ -69,6 +77,7 @@ const LEDPatternDesigner = () => {
       },
     }));
 
+    // Modify updateDimensions to use "0x0FFF"
     if (["width", "height"].includes(property)) {
       setPatterns((prev) => {
         const newPattern = Array(
@@ -78,7 +87,7 @@ const LEDPatternDesigner = () => {
           .map(() =>
             Array(
               property === "width" ? numValue : prev[section][0].length
-            ).fill("#0FFF")
+            ).fill("0x0FFF")
           );
 
         for (
@@ -103,25 +112,61 @@ const LEDPatternDesigner = () => {
     }
   };
 
+  // Modify handleColorCell to handle color conversion properly
   const handleColorCell = (section, row, col) => {
+    let ledColor;
+    if (activeColor.toUpperCase() === "#FFFFFF") {
+      ledColor = "0x0FFF";
+    } else {
+      // Convert RGB color to 12-bit format
+      const r = parseInt(activeColor.slice(1, 3), 16);
+      const g = parseInt(activeColor.slice(3, 5), 16);
+      const b = parseInt(activeColor.slice(5, 7), 16);
+      ledColor = rgbToHex(r, g, b);
+    }
+
     setPatterns((prev) => ({
       ...prev,
       [section]: prev[section].map((r, i) =>
         i === row
-          ? r.map((j, index) =>
-              index === col ? activeColor.replace("#", "0x") : j
-            )
+          ? r.map((j, index) => index === col ? ledColor : j)
           : r
       ),
     }));
   };
 
+  // Modify rgbToHex to output 12-bit color format
   const rgbToHex = (r, g, b) => {
-    const componentToHex = (c) => {
-      const hex = Math.round(c).toString(16);
-      return hex.length === 1 ? "0" + hex : hex;
-    };
-    return `#${componentToHex(r)}${componentToHex(g)}${componentToHex(b)}`;
+    // Check if the color is close to white
+    if (r > 240 && g > 240 && b > 240) {
+      return "0x0FFF";
+    }
+
+    // Convert to 4-bit color components (0-15)
+    const r4 = Math.round((r / 255) * 15);
+    const g4 = Math.round((g / 255) * 15);
+    const b4 = Math.round((b / 255) * 15);
+    
+    // Combine into 12-bit color (4 bits each for R,G,B)
+    const colorValue = (r4 << 8) | (g4 << 4) | b4;
+    
+    // Format as hex string with 0x prefix, ensuring 3 digits
+    return `0x${colorValue.toString(16).padStart(3, '0').toUpperCase()}`;
+  };
+
+  // Add helper function to convert 12-bit color to RGB
+  const convert12BitToRGB = (color) => {
+    if (color === "0x0FFF") return "#FFFFFF";
+    
+    // Extract RGB components from 0xRGB format (remove "0x" prefix)
+    const colorValue = parseInt(color.replace("0x", ""), 16);
+    
+    // Extract 4-bit components and convert to 8-bit
+    const r = ((colorValue >> 8) & 0xF) * 17;
+    const g = ((colorValue >> 4) & 0xF) * 17;
+    const b = (colorValue & 0xF) * 17;
+    
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   };
 
   const handleImageUpload = (event) => {
@@ -132,7 +177,7 @@ const LEDPatternDesigner = () => {
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        setImagePreview(img.src);
+        setImagePreview(img);
         processImage(img);
       };
       img.src = e.target.result;
@@ -140,99 +185,116 @@ const LEDPatternDesigner = () => {
     reader.readAsDataURL(file);
   };
 
-  // Add function to calculate physical layout
-  const calculatePhysicalLayout = () => {
-    const { pixelSize, wingGap, tailGap, wingTailGap } = ledSpacing;
-    const totalWidth = (dimensions.leftWing.width * 2 + wingGap) * pixelSize;
-    const totalHeight = (dimensions.leftWing.height + wingTailGap + dimensions.leftTail.height) * pixelSize;
+  // Add new helper function to calculate image bounds
+  const calculateImageBounds = (img) => {
+    const { scale, rotation } = imagePosition;
+    const width = img.width * scale;
+    const height = img.height * scale;
+    
+    // Calculate rotated dimensions
+    const radians = (rotation * Math.PI) / 180;
+    const rotatedWidth = Math.abs(width * Math.cos(radians)) + Math.abs(height * Math.sin(radians));
+    const rotatedHeight = Math.abs(height * Math.cos(radians)) + Math.abs(width * Math.sin(radians));
+    
+    return { width: rotatedWidth, height: rotatedHeight };
+  };
+
+  // Add helper function to convert relative to absolute positions
+  const getAbsolutePosition = (img) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
+    // Calculate base scale that makes image width match wing span at scale 1
+    const wingSpan = getTotalWingSpan();
+    const baseScale = wingSpan / img.width;
+    const effectiveScale = baseScale * imagePosition.scale;
 
     return {
-      leftWing: {
-        x: 0,
-        y: 0,
-        width: dimensions.leftWing.width * pixelSize,
-        height: dimensions.leftWing.height * pixelSize,
-      },
-      rightWing: {
-        x: (dimensions.leftWing.width + wingGap) * pixelSize,
-        y: 0,
-        width: dimensions.rightWing.width * pixelSize,
-        height: dimensions.rightWing.height * pixelSize,
-      },
-      leftTail: {
-        x: dimensions.leftWing.width * pixelSize / 2,
-        y: (dimensions.leftWing.height + wingTailGap) * pixelSize,
-        width: dimensions.leftTail.width * pixelSize,
-        height: dimensions.leftTail.height * pixelSize,
-      },
-      rightTail: {
-        x: (dimensions.leftWing.width + wingGap) * pixelSize / 2,
-        y: (dimensions.leftWing.height + wingTailGap) * pixelSize,
-        width: dimensions.rightTail.width * pixelSize,
-        height: dimensions.rightTail.height * pixelSize,
-      },
+      x: (imagePosition.x / 100 * canvas.width) - (canvas.width / 2),
+      y: (imagePosition.y / 100 * canvas.height) - (canvas.height / 2),
+      scale: effectiveScale
     };
   };
 
-  // Modify the processImage function
+  // Add helper to calculate total wing span
+  const getTotalWingSpan = () => {
+    const totalWidth = dimensions.leftWing.width + dimensions.rightWing.width;
+    return totalWidth;
+  };
+
+  // Add a second canvas ref for image processing
+  const processCanvasRef = useRef(null);
+
+  // Update processImage function
   const processImage = (img) => {
-    const canvas = canvasRef.current;
+    const canvas = processCanvasRef.current;
     const ctx = canvas.getContext("2d");
-    const layout = calculatePhysicalLayout();
-
-    // Calculate canvas dimensions based on physical layout
-    canvas.width = (dimensions.leftWing.width * 2 + ledSpacing.wingGap) * ledSpacing.pixelSize;
-    canvas.height = (dimensions.leftWing.height + ledSpacing.wingTailGap + dimensions.leftTail.height) * ledSpacing.pixelSize;
-
+  
+    // Set fixed canvas size based on LED layout
+    const maxX = Math.max(
+      ...Object.values(dimensions).map(d => d.x + d.width)
+    );
+    const maxY = Math.max(
+      ...Object.values(dimensions).map(d => d.y + d.height)
+    );
+    
+    canvas.width = maxX;
+    canvas.height = maxY;
+  
     // Clear canvas
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw image according to spanning settings
-    if (imageSpanning.preserveAspectRatio) {
-      const scale = Math.min(
-        canvas.width / img.width,
-        canvas.height / img.height
-      );
-      const scaledWidth = img.width * scale;
-      const scaledHeight = img.height * scale;
-      const x = (canvas.width - scaledWidth) / 2;
-      const y = (canvas.height - scaledHeight) / 2;
-      ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
-    } else {
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    }
-
-    // Update patterns based on physical layout
-    Object.entries(layout).forEach(([section, coords]) => {
+  
+    // Calculate image scaling to fit the wing span
+    const wingSpan = dimensions.leftWing.width + dimensions.rightWing.width;
+    const scale = (wingSpan * imagePosition.scale) / img.width;
+  
+    // Draw image with transformations
+    ctx.save();
+    
+    // Move to center of canvas
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    
+    // Apply rotation
+    ctx.rotate((imagePosition.rotation * Math.PI) / 180);
+    
+    // Apply scale
+    ctx.scale(scale, scale);
+    
+    // Apply position offset
+    const offsetX = ((imagePosition.x - 50) / 50) * canvas.width;
+    const offsetY = ((imagePosition.y - 50) / 50) * canvas.height;
+    ctx.translate(offsetX / scale, offsetY / scale);
+    
+    // Draw image centered
+    ctx.drawImage(img, -img.width / 2, -img.height / 2);
+    ctx.restore();
+  
+    // Update patterns based on pixel colors
+    Object.entries(dimensions).forEach(([section, dims]) => {
       if (!selectedSections[section]) return;
-
-      const newPattern = Array(dimensions[section].height)
+  
+      const newPattern = Array(dims.height)
         .fill()
         .map((_, row) =>
-          Array(dimensions[section].width)
+          Array(dims.width)
             .fill()
             .map((_, col) => {
-              const x = Math.floor(coords.x + (col * ledSpacing.pixelSize));
-              const y = Math.floor(coords.y + (row * ledSpacing.pixelSize));
-              const pixelData = ctx.getImageData(x, y, ledSpacing.pixelSize, ledSpacing.pixelSize).data;
+              const x = dims.x + col;
+              const y = dims.y + row;
               
-              // Average color over pixel area
-              let r = 0, g = 0, b = 0;
-              for (let i = 0; i < ledSpacing.pixelSize; i++) {
-                for (let j = 0; j < ledSpacing.pixelSize; j++) {
-                  const idx = ((y + j) * canvas.width + (x + i)) * 4;
-                  r += pixelData[idx];
-                  g += pixelData[idx + 1];
-                  b += pixelData[idx + 2];
+              try {
+                const pixelData = ctx.getImageData(x, y, 1, 1).data;
+                if (pixelData[3] < 128) { // Check alpha channel
+                  return "0x0FFF"; // Return white for transparent pixels
                 }
+                return rgbToHex(pixelData[0], pixelData[1], pixelData[2]);
+              } catch (e) {
+                return "0x0FFF"; // Return white for out of bounds
               }
-              const area = ledSpacing.pixelSize * ledSpacing.pixelSize;
-              const hex = rgbToHex(r/area, g/area, b/area);
-              return hex.replace("#", "0x");
             })
         );
-
+  
       setPatterns(prev => ({
         ...prev,
         [section]: newPattern
@@ -282,6 +344,7 @@ const LEDPatternDesigner = () => {
     }
   };
 
+  // Modify renderSection to handle mouse events
   const renderSection = (section, title) => (
     <div className="border border-gray-200 p-4 rounded-lg">
       <h3 className="font-bold mb-2">{title}</h3>
@@ -328,12 +391,30 @@ const LEDPatternDesigner = () => {
             className="w-full px-3 py-2 border border-gray-300 rounded-md"
           />
         </div>
+        <div className="col-span-2">
+          <label className="block text-sm font-medium mb-1">Grid Alignment</label>
+          <select
+            value={gridJustification[section]}
+            onChange={(e) => setGridJustification(prev => ({
+              ...prev,
+              [section]: e.target.value
+            }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+          >
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+          </select>
+        </div>
       </div>
       <div
         className="grid gap-1"
         style={{
           gridTemplateColumns: `repeat(${dimensions[section].width}, 1.1em)`,
+          justifyContent: gridJustification[section] === 'right' ? 'end' : 
+                         gridJustification[section] === 'center' ? 'center' : 'start'
         }}
+        onMouseLeave={() => setIsDragging(false)}
       >
         {patterns[section].map((row, rowIndex) =>
           row.map((cell, colIndex) => (
@@ -341,9 +422,23 @@ const LEDPatternDesigner = () => {
               key={`${rowIndex}-${colIndex}`}
               className="w-5 h-5 border border-gray-300 cursor-pointer"
               style={{
-                backgroundColor: cell.replace("0x", "#"),
+                backgroundColor: convert12BitToRGB(cell),
               }}
-              onClick={() => handleColorCell(section, rowIndex, colIndex)}
+              onMouseDown={(e) => {
+                e.preventDefault(); // Prevent text selection while dragging
+                setIsDragging(true);
+                setCurrentSection(section);
+                handleColorCell(section, rowIndex, colIndex);
+              }}
+              onMouseEnter={() => {
+                if (isDragging && currentSection === section) {
+                  handleColorCell(section, rowIndex, colIndex);
+                }
+              }}
+              onMouseUp={() => {
+                setIsDragging(false);
+                setCurrentSection(null);
+              }}
             />
           ))
         )}
@@ -351,138 +446,203 @@ const LEDPatternDesigner = () => {
     </div>
   );
 
-  // Add spacing controls to the UI
-  const renderSpacingControls = () => (
-    <div className="mb-6 grid grid-cols-2 gap-4">
-      <div>
-        <label className="block text-sm font-medium mb-1">LED Pixel Size (px)</label>
-        <input
-          type="number"
-          value={ledSpacing.pixelSize}
-          onChange={(e) => setLedSpacing(prev => ({...prev, pixelSize: parseInt(e.target.value)}))}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-        />
-      </div>
-      {/* Add similar controls for wingGap, tailGap, and wingTailGap */}
-    </div>
-  );
+  // Add global mouse up handler to stop dragging
+  useEffect(() => {
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      setCurrentSection(null);
+    };
 
-  // Add spanning controls to the UI
-  const renderSpanningControls = () => (
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  // Update renderImageControls with relative values
+  const renderImageControls = () => (
     <div className="mb-6">
-      <h3 className="font-bold mb-2">Image Spanning Options</h3>
-      <div className="space-y-2">
-        <label className="flex items-center space-x-2">
+      <h3 className="font-bold mb-2">Image Position Controls</h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">X Position ({imagePosition.x}%)</label>
           <input
-            type="checkbox"
-            checked={imageSpanning.spanWings}
-            onChange={(e) => setImageSpanning(prev => ({...prev, spanWings: e.target.checked}))}
+            type="range"
+            min={0}
+            max={100}
+            value={imagePosition.x}
+            onChange={(e) => {
+              setImagePosition(prev => ({...prev, x: parseInt(e.target.value)}));
+              if (imagePreview) processImage(imagePreview);
+            }}
+            className="w-full"
           />
-          <span>Span across wings</span>
-        </label>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Y Position ({imagePosition.y}%)</label>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={imagePosition.y}
+            onChange={(e) => {
+              setImagePosition(prev => ({...prev, y: parseInt(e.target.value)}));
+              if (imagePreview) processImage(imagePreview);
+            }}
+            className="w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Scale ({(imagePosition.scale).toFixed(2)}x wing span)
+          </label>
+          <input
+            type="range"
+            min={0.1}
+            max={2}
+            step={0.05}
+            value={imagePosition.scale}
+            onChange={(e) => {
+              setImagePosition(prev => ({...prev, scale: parseFloat(e.target.value)}));
+              if (imagePreview) processImage(imagePreview);
+            }}
+            className="w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Rotation ({imagePosition.rotation}°)</label>
+          <input
+            type="range"
+            min={-180}
+            max={180}
+            value={imagePosition.rotation}
+            onChange={(e) => {
+              setImagePosition(prev => ({...prev, rotation: parseInt(e.target.value)}));
+              if (imagePreview) processImage(imagePreview);
+            }}
+            className="w-full"
+          />
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="p-4 max-w-12xl mx-auto font-sans">
-      <div className="bg-white rounded-lg shadow-lg">
-        <div className="p-6">
-          <h2 className="text-3xl font-bold mb-6 text-gray-800">Glowstick LED Pattern Designer</h2>
-
+    <div className="container mx-auto px-4 py-8">
+      <canvas
+        ref={processCanvasRef}
+        style={{ display: 'none' }}
+        width={1000}
+        height={1000}
+      />
+      <div className="card">
+        <div className="card-body">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2 text-gray-700">
-              Paint Color
-            </label>
-            <input
-              type="color"
-              value={activeColor}
-              onChange={(e) => setActiveColor(e.target.value)}
-              className="w-full h-12 rounded-md shadow-sm"
-            />
-          </div>
-
-          <div className="mb-6">
-            <label className="block text-sm font-medium mb-2 text-gray-700">
-              Image Upload
-            </label>
-            <div className="flex gap-4 items-center">
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="w-full text-sm text-gray-500
-                  file:mr-4 file:py-2 file:px-4
-                  file:rounded-full file:border-0
-                  file:text-sm file:font-semibold
-                  file:bg-blue-50 file:text-blue-700
-                  hover:file:bg-blue-100"
-              />
-              {imagePreview && (
-                <div className="border p-2 rounded-md">
-                  <img
-                    src={imagePreview}
-                    alt="Preview"
-                    className="h-20 object-contain"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              {Object.entries(selectedSections).map(([section, checked]) => (
-                <div key={section} className="flex items-center space-x-2">
+          
+          <div className="grid-2-cols mb-6">
+            {/* Color and Image Controls */}
+            <div className="control-group">
+              <h3 className="control-group-title">Design Tools</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Paint Color</label>
                   <input
-                    type="checkbox"
-                    id={section}
-                    checked={checked}
-                    onChange={(e) =>
-                      setSelectedSections((prev) => ({
-                        ...prev,
-                        [section]: e.target.checked,
-                      }))
-                    }
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    type="color"
+                    value={activeColor}
+                    onChange={(e) => setActiveColor(e.target.value)}
+                    className="w-full h-12 rounded-md shadow-sm"
                   />
-                  <label htmlFor={section} className="text-sm text-gray-700">
-                    {section}
-                  </label>
                 </div>
-              ))}
+                <div>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Upload Image</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-full file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-blue-50 file:text-blue-700
+                      hover:file:bg-blue-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section Selection */}
+            <div className="control-group">
+              <h3 className="control-group-title">Active Sections</h3>
+              <div className="grid-2-cols">
+                {Object.entries(selectedSections).map(([section, checked]) => (
+                  <div key={section} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={section}
+                      checked={checked}
+                      onChange={(e) =>
+                        setSelectedSections((prev) => ({
+                          ...prev,
+                          [section]: e.target.checked,
+                        }))
+                      }
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor={section} className="text-sm text-gray-700">
+                      {section.replace(/([A-Z])/g, ' $1').trim()}
+                    </label>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          <canvas ref={canvasRef} className="hidden" />
+          {/* Image Preview and Controls */}
+          {imagePreview && (
+            <div className="control-group">
+              <div className="flex items-start gap-6">
+                <div className="w-48 shrink-0">
+                  <img
+                    src={imagePreview.src}
+                    alt="Preview"
+                    className="w-full rounded-lg border border-gray-200"
+                  />
+                </div>
+                {renderImageControls()}
+              </div>
+            </div>
+          )}
 
-          {renderSpacingControls()}
-          {renderSpanningControls()}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* LED Pattern Grids */}
+          <div className="grid-2-cols mb-6">
             {renderSection("leftWing", "Left Wing")}
             {renderSection("rightWing", "Right Wing")}
+          </div>
+          <div className="grid-2-cols mb-6">
             {renderSection("leftTail", "Left Tail")}
             {renderSection("rightTail", "Right Tail")}
           </div>
 
-          <button
-            onClick={downloadFile}
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-md transition duration-150 ease-in-out mb-6"
-          >
-            Download patterns.h
-          </button>
-
-          <div className="mt-6">
-            <label className="block text-sm font-medium mb-2 text-gray-700">
-              Preview of patterns.h:
-            </label>
-            <pre className="mt-2 p-4 bg-gray-100 rounded-md overflow-x-auto text-sm">
-              {generateCode()}
-            </pre>
+          {/* Export Controls */}
+          <div className="control-group">
+            <h3 className="control-group-title">Export Pattern</h3>
+            <button
+              onClick={downloadFile}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-4 rounded-md transition duration-150 ease-in-out"
+            >
+              Download patterns.h
+            </button>
+            
+            <div className="mt-6">
+              <label className="block text-sm font-medium mb-2 text-gray-700">
+                Code Preview:
+              </label>
+              <pre className="mt-2 p-4 bg-gray-100 rounded-md overflow-x-auto text-sm">
+                {generateCode()}
+              </pre>
+            </div>
           </div>
         </div>
       </div>

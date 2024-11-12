@@ -1,38 +1,48 @@
-# Glowstick LED designer
+# Glowstick LED Designer
 
-try it at https://mc71-glowstick.deno.dev/
+A web-based design tool for creating LED patterns specifically for the [Lofted Aero Glowstick](https://github.com/LoftedAero/GlowStick) project. Try it live at https://mc71-glowstick.deno.dev/
 
+## Features
 
-This was created specifically for the Lofted Aero Glowstick but can be adapted for any other application.
+- Interactive LED grid designer for wings and tail surfaces
+- Color picker for manual LED coloring
+- Image upload capability with:
+  - Position, scale, and rotation controls
+  - Automatic pixel-to-LED mapping
+  - Selective surface application
+- Exports directly to C header file format
+- Support for 12-bit color format (4 bits each for R,G,B)
 
-https://github.com/LoftedAero/GlowStick
+## Screenshots
 
-Design the patterns manually using the colour picker and select the LED pixel or upload an image. When uploading an image you can select which surfaces to apply the image to.
+![Designer Interface](https://github.com/mc71/Glowstick-Web/blob/main/screenshots/Screenshot%202024-10-31%20at%2011.31.54%E2%80%AFPM.png)
+*The designer interface showing LED grid layout and controls*
 
-There is a preview and button to download the profiles.h file 
+![Output](https://github.com/mc71/Glowstick-Web/blob/main/screenshots/Screenshot%202024-10-31%20at%2011.31.46%E2%80%AFPM.png)
+*Example of generated C code output*
 
-**This is very much a proof of concept.**
+## Planned Features
 
-Todo: Properly match the image dimesnions to the LED arrangement.
-provide a way to position the LED surfaces in space correctly.
-Add text input and animation
-Better handling of the pixel array to avoid overlapping
+- Text input support
+- Animation capabilities
+- GIF support
+- Multi-pattern export
+- 3D preview of LED placement
 
+## Development
 
+Created with [Fresh](https://fresh.deno.dev/), a next-gen web framework built for Deno.
 
-Created with Fresh.
-You can follow the Fresh "Getting Started" guide here: https://fresh.deno.dev/docs/getting-started
+### Prerequisites
 
+- [Deno](https://deno.land/manual/getting_started/installation)
 
-### Usage
+### Local Setup
 
-Make sure to install Deno: https://deno.land/manual/getting_started/installation
-
-Then start the project:
-
+1. Clone the repository
+2. Run the development server:
 ```
 deno task start
 ```
 
 This will watch the project directory and restart as necessary.
-
